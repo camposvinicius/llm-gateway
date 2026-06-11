@@ -1,0 +1,17 @@
+{
+  "_comment": "Example pricing only — set GATEWAY_PRICING_FILE to your own table with your negotiated prices. Prices are strings (USD per million tokens) because money is never a float.",
+  "models": {
+    "echo-1": {
+      "input_per_million": "0.10",
+      "output_per_million": "0.40"
+    },
+    "example-small": {
+      "input_per_million": "0.25",
+      "output_per_million": "1.25"
+    },
+    "example-large": {
+      "input_per_million": "3.00",
+      "output_per_million": "15.00"
+    }
+  }
+}
