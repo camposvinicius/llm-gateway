@@ -1,0 +1,9 @@
+{
+  "_comment": "Example Bedrock pricing table. Replace values with your region/model/pricing agreement. Prices are USD per million tokens, encoded as strings.",
+  "models": {
+    "global.anthropic.claude-haiku-4-5-20251001-v1:0": {
+      "input_per_million": "1.00",
+      "output_per_million": "5.00"
+    }
+  }
+}
