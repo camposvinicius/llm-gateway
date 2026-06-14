@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check src tests
+      - name: Tests
+        run: pytest
+      - name: Offline smoke test
+        run: |
+          GATEWAY_PROVIDERS=echo \
+          GATEWAY_PRICING_FILE=data/pricing.example.json \
+          GATEWAY_LEDGER_PATH=/tmp/gateway.db \
+          python - <<'PY'
+          from fastapi.testclient import TestClient
+          from gateway.app import create_app
+          client = TestClient(create_app())
+          r = client.post('/v1/chat', json={'messages': [{'role': 'user', 'content': 'ci smoke'}]})
+          assert r.status_code == 200, r.text
+          assert r.json()['cost']['micro_usd'] > 0
+          PY
