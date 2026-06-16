@@ -18,6 +18,14 @@ def build_providers(settings: Settings) -> list[Provider]:
             from .providers.bedrock import BedrockProvider
 
             providers.append(BedrockProvider(model=settings.bedrock_model))
+        elif name == "openai":
+            from .providers.openai import OpenAIProvider
+
+            providers.append(OpenAIProvider(model=settings.openai_model))
+        elif name == "gemini":
+            from .providers.gemini import GeminiProvider
+
+            providers.append(GeminiProvider(model=settings.gemini_model))
     return providers
 
 

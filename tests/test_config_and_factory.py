@@ -26,7 +26,7 @@ def test_default_settings_are_offline_echo(monkeypatch):
 
 
 def test_unsupported_provider_fails(monkeypatch):
-    monkeypatch.setenv("GATEWAY_PROVIDERS", "openai")
+    monkeypatch.setenv("GATEWAY_PROVIDERS", "anthropic-direct")
     with pytest.raises(ConfigError, match="Unsupported provider"):
         Settings.from_env()
 
