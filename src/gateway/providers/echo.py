@@ -9,6 +9,7 @@ hand-checkable.
 
 from __future__ import annotations
 
+from ..messages import text_of
 from .base import Completion, ProviderError
 
 
@@ -21,14 +22,16 @@ class EchoProvider:
         self._model = model
         self._fail = fail  # used in tests to exercise fallback
 
-    def complete(self, messages: list[dict]) -> Completion:
+    def complete(self, messages: list[dict], tools: list[dict] | None = None) -> Completion:
+        # Echo never calls tools; it accepts the argument so it stays a drop-in
+        # Provider for the tool-aware router and agent loop.
         if self._fail:
             raise ProviderError("echo provider configured to fail")
         if not messages:
             raise ProviderError("no messages provided")
 
         last_user = next(
-            (m["content"] for m in reversed(messages) if m.get("role") == "user"), None
+            (text_of(m["content"]) for m in reversed(messages) if m.get("role") == "user"), None
         )
         if last_user is None:
             raise ProviderError("no user message found")
@@ -37,6 +40,6 @@ class EchoProvider:
         return Completion(
             text=text,
             model=self._model,
-            input_tokens=sum(len(m.get("content", "").split()) for m in messages),
+            input_tokens=sum(len(text_of(m.get("content", "")).split()) for m in messages),
             output_tokens=len(text.split()),
         )

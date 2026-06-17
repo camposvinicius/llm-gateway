@@ -12,8 +12,9 @@ import os
 
 import httpx
 
+from ..messages import normalize_content
 from ..retry import RetryPolicy, call_with_retries, is_retryable_http_status
-from .base import Completion, ProviderError
+from .base import Completion, ProviderError, ToolCall
 
 _DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com"
 
@@ -49,7 +50,7 @@ class GeminiProvider:
         self._client = client
         self._retry = retry_policy or RetryPolicy.from_env()
 
-    def complete(self, messages: list[dict]) -> Completion:
+    def complete(self, messages: list[dict], tools: list[dict] | None = None) -> Completion:
         if not messages:
             raise ProviderError("no messages provided")
 
@@ -57,15 +58,13 @@ class GeminiProvider:
         system_parts: list[str] = []
         for message in messages:
             role = message.get("role")
-            text = message.get("content", "")
             if role == "system":
-                system_parts.append(text)
-            else:
+                system_parts.append(_text_only(message.get("content", "")))
+                continue
+            parts = _to_gemini_parts(message.get("content", ""))
+            if parts:
                 contents.append(
-                    {
-                        "role": "user" if role == "user" else "model",
-                        "parts": [{"text": text}],
-                    }
+                    {"role": "user" if role == "user" else "model", "parts": parts}
                 )
         if not contents:
             raise ProviderError("messages must include at least one user/assistant turn")
@@ -76,6 +75,8 @@ class GeminiProvider:
         }
         if system_parts:
             payload["systemInstruction"] = {"parts": [{"text": "\n\n".join(system_parts)}]}
+        if tools:
+            payload["tools"] = [{"functionDeclarations": _to_gemini_declarations(tools)}]
 
         try:
             data = call_with_retries(
@@ -91,10 +92,18 @@ class GeminiProvider:
             raise ProviderError(f"gemini request failed: {exc}") from exc
 
         try:
-            text = data["candidates"][0]["content"]["parts"][0]["text"]
+            parts = data["candidates"][0]["content"]["parts"]
+            # Thinking models (Gemini 3.x) interleave thought parts that carry a
+            # thoughtSignature and no "text"; join only the text parts.
+            text = "".join(part["text"] for part in parts if "text" in part)
+            tool_calls = _parse_function_calls(parts)
             usage = data["usageMetadata"]
             input_tokens = int(usage["promptTokenCount"])
-            output_tokens = int(usage.get("candidatesTokenCount", 0))
+            # thoughtsTokenCount is billed at the output rate, so it must be
+            # metered as output or the cost is understated for thinking models.
+            output_tokens = int(usage.get("candidatesTokenCount", 0)) + int(
+                usage.get("thoughtsTokenCount", 0)
+            )
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise ProviderError(
                 f"gemini response missing expected fields: {data!r}"
@@ -105,6 +114,8 @@ class GeminiProvider:
             model=self._model,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            tool_calls=tool_calls,
+            stop_reason="tool_use" if tool_calls else "end_turn",
         )
 
     def _post(self, payload: dict) -> dict:
@@ -120,6 +131,70 @@ class GeminiProvider:
                 client.close()
         response.raise_for_status()
         return response.json()
+
+
+def _text_only(content) -> str:
+    if isinstance(content, str):
+        return content
+    blocks = normalize_content(content)
+    return "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+
+
+def _to_gemini_parts(content) -> list[dict]:
+    """Translate one message's content into Gemini ``parts``.
+
+    Gemini pairs a tool result to its call by **function name**, not an id —
+    so the canonical ``tool_result`` block carries ``name`` and we use it here.
+    """
+    parts: list[dict] = []
+    for block in normalize_content(content):
+        kind = block.get("type")
+        if kind == "text":
+            if block.get("text"):
+                parts.append({"text": block["text"]})
+        elif kind == "tool_use":
+            part = {"functionCall": {"name": block["name"], "args": block.get("input", {})}}
+            if block.get("signature"):
+                part["thoughtSignature"] = block["signature"]
+            parts.append(part)
+        elif kind == "tool_result":
+            result = block.get("content", "")
+            response = result if isinstance(result, dict) else {"result": result}
+            parts.append(
+                {"functionResponse": {"name": block.get("name", ""), "response": response}}
+            )
+    return parts
+
+
+def _to_gemini_declarations(tools: list[dict]) -> list[dict]:
+    return [
+        {
+            "name": tool["name"],
+            "description": tool.get("description", ""),
+            "parameters": tool.get("input_schema", {"type": "object", "properties": {}}),
+        }
+        for tool in tools
+    ]
+
+
+def _parse_function_calls(parts: list[dict]) -> tuple[ToolCall, ...]:
+    calls = []
+    for index, part in enumerate(parts):
+        function_call = part.get("functionCall")
+        if function_call:
+            calls.append(
+                ToolCall(
+                    # Gemini has no native call id; synthesize a unique one so
+                    # the agent can pair results even on duplicate tool names.
+                    id=f"gemini-{index}-{function_call.get('name', '')}",
+                    name=function_call.get("name", ""),
+                    input=function_call.get("args", {}) or {},
+                    # Gemini 3.x rejects history whose functionCall part is
+                    # missing its thoughtSignature — carry it through.
+                    signature=part.get("thoughtSignature"),
+                )
+            )
+    return tuple(calls)
 
 
 def _is_retryable(exc: Exception) -> bool:

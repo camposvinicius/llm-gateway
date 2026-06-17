@@ -1,0 +1,161 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a31 transparent;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 30% 0%, rgba(77, 221, 159, 0.12), transparent 34rem),
+    radial-gradient(circle at 82% 18%, rgba(155, 125, 255, 0.12), transparent 30rem),
+    hsl(222 18% 8%);
+  color: hsl(210 20% 98%);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+button,
+textarea,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a2a31;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.glass {
+  background: rgba(20, 25, 35, 0.74);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(18px);
+}
+
+.markdown {
+  color: hsl(210 20% 93%);
+  font-size: 0.94rem;
+  line-height: 1.72;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  color: hsl(210 20% 98%);
+  font-weight: 750;
+  line-height: 1.2;
+  margin: 1.05rem 0 0.55rem;
+}
+
+.markdown h1 { font-size: 1.28rem; }
+.markdown h2 { font-size: 1.12rem; }
+.markdown h3 { font-size: 1rem; }
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown blockquote,
+.markdown pre,
+.markdown table {
+  margin: 0.7rem 0;
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: 1.35rem;
+}
+
+.markdown li {
+  margin: 0.28rem 0;
+}
+
+.markdown strong {
+  color: hsl(210 20% 98%);
+  font-weight: 750;
+}
+
+.markdown a {
+  color: hsl(154 62% 60%);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown a:hover {
+  color: hsl(154 62% 70%);
+}
+
+.markdown code {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  background: rgba(0, 0, 0, 0.32);
+  padding: 0.12rem 0.34rem;
+  font-size: 0.86em;
+}
+
+.markdown pre {
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  background: rgba(0, 0, 0, 0.34);
+  padding: 1rem;
+}
+
+.markdown pre code {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.markdown blockquote {
+  border-left: 3px solid hsl(154 62% 56%);
+  color: hsl(218 11% 72%);
+  padding-left: 1rem;
+}
+
+.markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border-radius: 0.8rem;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+}
+
+.markdown th {
+  background: rgba(255, 255, 255, 0.06);
+}

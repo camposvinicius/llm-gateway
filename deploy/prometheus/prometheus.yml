@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: llm-gateway
+    # Inside the compose network the gateway is reachable by service name.
+    static_configs:
+      - targets: ["gateway:8080"]

@@ -1,0 +1,69 @@
+# Self-contained observability demo — one command, real Prometheus + Grafana UIs.
+#
+#   docker compose up --build      # (or: docker-compose up --build)
+#
+# Then open:
+#   - Grafana     http://localhost:3001   (no login; dashboard pre-loaded)
+#   - Prometheus  http://localhost:9090
+#   - Gateway     http://localhost:8080/metrics
+#
+# The gateway runs in offline `echo` mode (no credentials needed) and a tiny
+# loadgen sends a request every few seconds so the dashboard shows live data.
+#
+# Format 2.4 is used so it runs on both legacy docker-compose v1 and the modern
+# `docker compose` v2 plugin.
+version: "2.4"
+
+services:
+  gateway:
+    build: .
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Demo traffic so the counters move and the dashboard isn't flat.
+  loadgen:
+    image: curlimages/curl:8.11.1
+    restart: unless-stopped
+    depends_on:
+      gateway:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          curl -s http://gateway:8080/v1/chat \
+            -H 'content-type: application/json' \
+            -d '{"messages":[{"role":"user","content":"demo traffic for the dashboard"}]}' \
+            >/dev/null 2>&1 || true
+          sleep 3
+        done
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - gateway
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    ports:
+      - "3001:3000"
+    environment:
+      # Land straight on the dashboard — no login, demo only.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_SECURITY_ADMIN_PASSWORD: "admin"
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus

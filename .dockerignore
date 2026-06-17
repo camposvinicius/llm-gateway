@@ -1,0 +1,23 @@
+# Keep the build context tiny: the gateway image only needs src/, data/,
+# pyproject.toml and README.md. Everything below is excluded — most importantly
+# examples/ (which holds an ~800 MB node_modules) and the local virtualenv.
+.git/
+.github/
+.venv/
+venv/
+examples/
+tests/
+docs/
+deploy/
+docker-compose.yml
+Dockerfile
+.dockerignore
+*.db
+.env
+.ruff_cache/
+.pytest_cache/
+**/__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/

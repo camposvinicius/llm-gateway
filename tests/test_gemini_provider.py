@@ -44,6 +44,114 @@ def test_successful_completion_maps_usage_metadata():
 
 
 @respx.mock
+def test_thinking_model_skips_thought_parts_and_bills_thought_tokens():
+    # Gemini 3.x thinking models interleave a thought part (thoughtSignature, no
+    # text) and bill thoughtsTokenCount at the output rate.
+    body = {
+        "candidates": [
+            {"content": {"parts": [{"thoughtSignature": "abc"}, {"text": "final answer"}]}}
+        ],
+        "usageMetadata": {
+            "promptTokenCount": 6,
+            "candidatesTokenCount": 2,
+            "thoughtsTokenCount": 178,
+        },
+    }
+    respx.post(_PATH).mock(return_value=httpx.Response(200, json=body))
+
+    with httpx.Client() as client:
+        completion = _provider(client).complete([{"role": "user", "content": "hi"}])
+
+    assert completion.text == "final answer"
+    assert completion.input_tokens == 6
+    assert completion.output_tokens == 2 + 178
+
+
+@respx.mock
+def test_function_call_parsed_with_thought_signature():
+    body = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "functionCall": {"name": "get_weather", "args": {"location": "Paris"}},
+                            "thoughtSignature": "sig123",
+                        }
+                    ]
+                }
+            }
+        ],
+        "usageMetadata": {
+            "promptTokenCount": 6,
+            "candidatesTokenCount": 0,
+            "thoughtsTokenCount": 10,
+        },
+    }
+    route = respx.post(_PATH).mock(return_value=httpx.Response(200, json=body))
+    tools = [{"name": "get_weather", "description": "w", "input_schema": {"type": "object"}}]
+
+    with httpx.Client() as client:
+        completion = _provider(client).complete(
+            [{"role": "user", "content": "weather?"}], tools=tools
+        )
+
+    import json
+
+    sent = json.loads(route.calls.last.request.content)
+    assert sent["tools"][0]["functionDeclarations"][0]["name"] == "get_weather"
+    assert completion.stop_reason == "tool_use"
+    call = completion.tool_calls[0]
+    assert call.name == "get_weather"
+    assert call.input == {"location": "Paris"}
+    assert call.signature == "sig123"
+
+
+@respx.mock
+def test_tool_use_echoes_signature_and_result_becomes_function_response():
+    route = respx.post(_PATH).mock(return_value=httpx.Response(200, json=_OK_BODY))
+    messages = [
+        {"role": "user", "content": "weather?"},
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "gemini-0-get_weather",
+                    "name": "get_weather",
+                    "input": {"location": "Paris"},
+                    "signature": "sig123",
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "gemini-0-get_weather",
+                    "name": "get_weather",
+                    "content": "18C",
+                }
+            ],
+        },
+    ]
+    with httpx.Client() as client:
+        _provider(client).complete(messages)
+
+    import json
+
+    contents = json.loads(route.calls.last.request.content)["contents"]
+    model_turn = next(c for c in contents if c["role"] == "model")
+    fc_part = model_turn["parts"][0]
+    assert fc_part["functionCall"]["name"] == "get_weather"
+    assert fc_part["thoughtSignature"] == "sig123"
+    result_turn = contents[-1]
+    assert result_turn["parts"][0]["functionResponse"]["name"] == "get_weather"
+    assert result_turn["parts"][0]["functionResponse"]["response"] == {"result": "18C"}
+
+
+@respx.mock
 def test_system_message_goes_to_system_instruction():
     captured: dict = {}
 

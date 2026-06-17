@@ -1,6 +1,6 @@
 """Providers package."""
 
-from .base import Completion, Provider, ProviderError
+from .base import Completion, Provider, ProviderError, ToolCall
 from .bedrock import BedrockProvider
 from .echo import EchoProvider
 from .gemini import GeminiProvider
@@ -10,6 +10,7 @@ __all__ = [
     "Completion",
     "Provider",
     "ProviderError",
+    "ToolCall",
     "EchoProvider",
     "BedrockProvider",
     "OpenAIProvider",

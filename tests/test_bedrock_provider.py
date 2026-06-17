@@ -42,7 +42,109 @@ def test_converse_request_and_usage_mapping():
     assert call["modelId"] == "model-1"
     assert call["system"] == [{"text": "be concise"}]
     assert call["messages"] == [{"role": "user", "content": [{"text": "say hello"}]}]
-    assert call["inferenceConfig"] == {"maxTokens": 512, "temperature": 0.0}
+    assert call["inferenceConfig"] == {"maxTokens": 2048, "temperature": 0.0}
+
+
+def test_max_tokens_is_configurable():
+    client = FakeBedrockClient(
+        response={
+            "output": {"message": {"content": [{"text": "ok"}]}},
+            "usage": {"inputTokens": 1, "outputTokens": 1},
+        }
+    )
+    provider = BedrockProvider(model="model-1", client=client, max_tokens=256)
+    provider.complete([{"role": "user", "content": "hi"}])
+    assert client.calls[0]["inferenceConfig"]["maxTokens"] == 256
+
+
+def test_temperature_omitted_for_sampling_removed_models():
+    # Claude Opus 4.8 (and the 4.7+/Fable family) reject `temperature` on
+    # Converse — the provider must not send it.
+    client = FakeBedrockClient(
+        response={
+            "output": {"message": {"content": [{"text": "ok"}]}},
+            "usage": {"inputTokens": 1, "outputTokens": 1},
+        }
+    )
+    provider = BedrockProvider(model="global.anthropic.claude-opus-4-8", client=client)
+    provider.complete([{"role": "user", "content": "hi"}])
+    assert "temperature" not in client.calls[0]["inferenceConfig"]
+
+
+def test_tool_config_sent_and_tool_use_parsed():
+    response = {
+        "output": {
+            "message": {
+                "content": [
+                    {"text": "Let me check."},
+                    {
+                        "toolUse": {
+                            "toolUseId": "tu1",
+                            "name": "get_weather",
+                            "input": {"location": "Paris"},
+                        }
+                    },
+                ]
+            }
+        },
+        "usage": {"inputTokens": 5, "outputTokens": 3},
+    }
+    client = FakeBedrockClient(response=response)
+    provider = BedrockProvider(model="model-1", client=client)
+    tools = [{"name": "get_weather", "description": "w", "input_schema": {"type": "object"}}]
+
+    completion = provider.complete([{"role": "user", "content": "weather?"}], tools=tools)
+
+    spec = client.calls[0]["toolConfig"]["tools"][0]["toolSpec"]
+    assert spec["name"] == "get_weather"
+    assert spec["inputSchema"] == {"json": {"type": "object"}}
+    assert completion.text == "Let me check."
+    assert completion.stop_reason == "tool_use"
+    assert completion.tool_calls[0].id == "tu1"
+    assert completion.tool_calls[0].input == {"location": "Paris"}
+
+
+def test_tool_use_and_result_blocks_translate_to_converse():
+    client = FakeBedrockClient(
+        response={
+            "output": {"message": {"content": [{"text": "done"}]}},
+            "usage": {"inputTokens": 1, "outputTokens": 1},
+        }
+    )
+    provider = BedrockProvider(model="model-1", client=client)
+    messages = [
+        {"role": "user", "content": "weather?"},
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "tu1",
+                    "name": "get_weather",
+                    "input": {"location": "Paris"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "tu1",
+                    "name": "get_weather",
+                    "content": "18C",
+                }
+            ],
+        },
+    ]
+    provider.complete(messages)
+
+    sent = client.calls[0]["messages"]
+    assert sent[1]["content"][0]["toolUse"]["toolUseId"] == "tu1"
+    assert sent[2]["content"][0]["toolResult"] == {
+        "toolUseId": "tu1",
+        "content": [{"text": "18C"}],
+    }
 
 
 def test_provider_errors_are_wrapped():

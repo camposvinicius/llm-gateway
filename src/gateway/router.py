@@ -47,15 +47,22 @@ class Router:
         self._pricing = pricing
         self._ledger = ledger
 
-    def complete(self, messages: list[dict]) -> RoutedResponse:
+    def complete(
+        self,
+        messages: list[dict],
+        provider_chain: list[str] | None = None,
+        tools: list[dict] | None = None,
+    ) -> RoutedResponse:
         started = time.monotonic()
         tried: list[str] = []
         errors: dict[str, str] = {}
 
-        for provider in self._providers:
+        providers = self._select_providers(provider_chain)
+
+        for provider in providers:
             tried.append(provider.name)
             try:
-                completion = provider.complete(messages)
+                completion = provider.complete(messages, tools=tools)
             except ProviderError as exc:
                 errors[provider.name] = str(exc)
                 continue
@@ -88,3 +95,21 @@ class Router:
             latency_ms=latency_ms, providers_tried=tried, error=str(error)
         )
         raise error
+
+    def _select_providers(self, provider_chain: list[str] | None) -> list[Provider]:
+        if provider_chain is None:
+            return self._providers
+
+        requested = [name.strip().lower() for name in provider_chain if name.strip()]
+        if not requested:
+            raise ValueError("provider_chain must include at least one provider")
+
+        by_name = {provider.name: provider for provider in self._providers}
+        unknown = [name for name in requested if name not in by_name]
+        if unknown:
+            available = ", ".join(sorted(by_name))
+            raise ValueError(
+                f"provider_chain contains unavailable provider(s): {unknown}; "
+                f"available providers: {available}"
+            )
+        return [by_name[name] for name in requested]
