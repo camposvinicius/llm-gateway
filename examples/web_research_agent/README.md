@@ -20,7 +20,8 @@ python examples/web_research_agent/research.py --provider gemini --max-steps 4 \
   "What are people on Hacker News saying about local LLMs?"
 ```
 
-Set `GATEWAY_URL` if the gateway is not on `http://127.0.0.1:8080`.
+Set `GATEWAY_URL` (or pass `--gateway <url>`) if the gateway is not on
+`http://127.0.0.1:8080`.
 
 ## What you'll see
 
